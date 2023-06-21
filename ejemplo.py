@@ -64,6 +64,17 @@ def get_average_length(sorted_info):
     average_length = total_length/num_of_seqs
     return average_length
 
+def get_n(sorted_info, n=50):
+    rev_sorted_info = dict(reversed(list(sorted_info.items())))
+    total_length = get_total_length(sorted_info)
+    n_length = total_length * n/100
+    length_sum = 0
+
+    for id in rev_sorted_info:
+        length_sum += rev_sorted_info[id]
+        if length_sum >= n_length:
+            return [rev_sorted_info[id], id]
+            break
 
 def main():
     arguments = get_options()
@@ -90,6 +101,31 @@ def main():
     average_length = get_average_length(sorted_info)
     average_msg = "Average length: {}"
     print(average_msg.format(average_length))
+
+    # n95 = get_n(sorted_info, n=95)
+    # n95_msg = "N95: {} {}"
+    # print(n95_msg.format(n95[0], n95[1]))
+
+    # n90 = get_n(sorted_info, n=90)
+    # n90_msg = "N90: {} {}"
+    # print(n90_msg.format(n90[0], n90[1]))
+
+    # n75 = get_n(sorted_info, n=75)
+    # n75_msg = "N75: {} {}"
+    # print(n75_msg.format(n75[0], n75[1]))
+
+    # n50 = get_n(sorted_info)
+    # n50_msg = "N50: {} {}"
+    # print(n50_msg.format(n50[0], n50[1]))
+
+    # n25 = get_n(sorted_info, n=25)
+    # n25_msg = "N25: {} {}"
+    # print(n25_msg.format(n25[0], n25[1]))
+
+    for number in [95, 90, 75, 50, 25]:
+        nXX = get_n(sorted_info, n=number)
+        nXX_msg = "N{}: {} {}"
+        print(nXX_msg.format(number, nXX[0], nXX[1]))
 
 if __name__ == "__main__":
     main()
