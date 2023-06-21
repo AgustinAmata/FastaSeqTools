@@ -74,7 +74,6 @@ def get_n(sorted_info, n=50):
         length_sum += rev_sorted_info[id]
         if length_sum >= n_length:
             return [rev_sorted_info[id], id]
-            break
 
 def main():
     arguments = get_options()
