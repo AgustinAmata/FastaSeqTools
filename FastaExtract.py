@@ -4,13 +4,14 @@ from csv import DictReader
 from pathlib import Path
 
 from Bio import SeqIO
+from Bio.Seq import reverse_complement
 from Bio.SeqUtils import gc_fraction
 
 def argument_parser():
     desc = """Extract sequences from a fasta file.
-    An additional file with specific ids with the following structures can be provided:
-    one-column (id), three columns (id + start + end)
-    or four columns (id + start + end + new id); start and end must be 1-based"""
+    An additional file with specific ids along with other data can be provided.
+    It must follow the order: ID + start + end + orientation + new ID;
+    start and end must be 1-based"""
     parser = argparse.ArgumentParser(description=desc)
 
     help_input_fasta = "Input fasta file (mandatory)"
@@ -25,8 +26,7 @@ def argument_parser():
     parser.add_argument("--id", "-i", help=help_extract_by_id,
                         required=False)
 
-    help_extract_by_length = """Integer to extract sequences by length.
-    If --id is present, it will only work with single-column files (only the id)"""
+    help_extract_by_length = "Integer to extract sequences by length."
     parser.add_argument("--length", "-l", help=help_extract_by_length,
                         type=int, required=False)
 
@@ -38,6 +38,22 @@ def argument_parser():
     help_split_output = """Output is split into individual files
     (the name of each output is the id of the sequence contained in the file)"""
     parser.add_argument("--split", "-S", help=help_split_output,
+                        action="store_true", required=False)
+
+    help_revcom = "Returns the reverse complementary of the sequences"
+    parser.add_argument("--revcom", "-R", help=help_revcom,
+                        action="store_true", required=False)
+
+    help_cut= "Cuts the sequences given the coordinates in the id file"
+    parser.add_argument("--cut", "-C", help=help_cut,
+                        action="store_true", required=False)
+    
+    help_orientate= "Orientates the sequence given the strand specified in the id file"
+    parser.add_argument("--orientate", "-O", help=help_orientate,
+                        action="store_true", required=False)
+
+    help_replace_ids = "Replaces ids with the ones specified in the id file"
+    parser.add_argument("--replace", "-I", help=help_replace_ids,
                         action="store_true", required=False)
 
     return parser
@@ -67,33 +83,16 @@ def get_selected_sequences(fasta_sequences, selected_ids):
 
     return selected_sequences
 
-def get_trimming_positions(fid_list):
-    trimming_positions = {}
-    for fid in fid_list:
-        fid = list(fid.values())
-        id = fid[0]
-        trim_pos = fid[1:3]
-
-        trimming_positions[id] = trim_pos
-
-    return trimming_positions
-
-def get_new_ids(fid_list):
-    new_ids = {}
-    for line in fid_list:
-        tags = list(line.values())
-        old_id = tags[0]
-        new_id = tags[3]
-        new_ids[old_id] = new_id
-    
-    return new_ids
-
-def get_cut_sequences(sequences_hand, length):
-    cut_sequences = {}
+def get_length_sequences(sequences_hand, length):
+    length_sequences = {}
     for id in sequences_hand.keys():
-        cut_sequences[id] = sequences_hand[id][:length]
+        if len(sequences_hand[id]) >= length:
+            length_sequences[id] = sequences_hand[id]
 
-    return cut_sequences
+    if length_sequences:
+        return length_sequences
+    else:
+        sys.exit("No sequence passed the length threshold, please select a lower one")
 
 def get_composition_sequences(sequences_hand, composition_hand):
     composition_sequences = {}
@@ -119,17 +118,61 @@ def get_composition_sequences(sequences_hand, composition_hand):
     if composition_sequences:
         return composition_sequences
     else:
-        sys.exit("No sequence passed the composition threshold, try a lower one")
+        sys.exit("No sequence passed the composition threshold, please select a lower one")
 
-def get_trimmed_sequences(sequences_hand, trimming_positions):
-    trimmed_sequences = {}
+def get_cut_positions(fid_list):
+    cut_positions = {}
+    for fid in fid_list:
+        fid = list(fid.values())
+        id = fid[0]
+        trim_pos = fid[1:3]
+
+        cut_positions[id] = trim_pos
+
+    return cut_positions
+
+def get_cut_sequences(sequences_hand, cut_positions):
+    cut_sequences = {}
     for id in sequences_hand.keys():
-        start = int(trimming_positions[id][0]) - 1
-        end = int(trimming_positions[id][1])
-        trimmed_seq = sequences_hand[id][start:end]
-        trimmed_sequences[id] = trimmed_seq
+        start = int(cut_positions[id][0]) - 1
+        end = int(cut_positions[id][1])
+        cut_seq = sequences_hand[id][start:end]
+        cut_sequences[id] = cut_seq
 
-    return trimmed_sequences
+    return cut_sequences
+
+def get_orientation(fid_list):
+    orientation = {}
+    for line in fid_list:
+        tags = list(line.values())
+        id = tags[0]
+        orient = tags[3]
+        orientation[id] = orient
+    
+    return orientation
+
+def get_orientated_sequences(sequences_hand, orientation):
+    orientated_sequences = {}
+    for id in sequences_hand.keys():
+        sequence = sequences_hand[id]
+        if orientation[id] == "-":
+            revcom_seq = reverse_complement(sequence)
+            orientated_sequences[id] = revcom_seq
+        
+        else:
+            orientated_sequences[id] = sequence
+
+    return orientated_sequences
+
+def get_new_ids(fid_list):
+    new_ids = {}
+    for line in fid_list:
+        tags = list(line.values())
+        old_id = tags[0]
+        new_id = tags[4]
+        new_ids[old_id] = new_id
+    
+    return new_ids
 
 def get_new_id_sequences(sequences_hand, new_ids):
     new_id_sequences = {}
@@ -139,6 +182,14 @@ def get_new_id_sequences(sequences_hand, new_ids):
         new_id_sequences[new_id] = sequence
 
     return new_id_sequences
+
+def get_revcom_sequences(sequences_hand):
+    revcom_sequences = {}
+    for id in sequences_hand.keys():
+        revcom = reverse_complement(sequences_hand[id])
+        revcom_sequences[id] = revcom
+
+    return revcom_sequences
 
 def construct_individual_outputs(sequences_hand):
     for id in sequences_hand.keys():
@@ -154,49 +205,43 @@ def main():
 
     if arguments.composition:
         fasta_sequences = get_composition_sequences(fasta_sequences,
-                                                     arguments.composition)
+                                                    arguments.composition)
+
+    if arguments.length:
+        length = arguments.length
+        fasta_sequences = get_length_sequences(fasta_sequences, length)
 
     if arguments.id:
         fid_list = []
         for line in DictReader(open(arguments.id), delimiter="\t"):
             fid_list.append(line)
 
-        line_length = len(fid_list[0].keys())
         selected_ids = get_selected_ids(fid_list)
         selected_sequences = get_selected_sequences(fasta_sequences,
                                                     selected_ids)
         
-        if line_length == 1:
-            if arguments.length:
-                length = arguments.length
-                cut_sequences = get_cut_sequences(selected_sequences, length)
-                final_sequences = cut_sequences
+        if arguments.cut:
+                cut_positions = get_cut_positions(fid_list)
+                selected_sequences = get_cut_sequences(selected_sequences,
+                                                       cut_positions)
 
-            else:
-                final_sequences = selected_sequences
+        if arguments.orientate:
+            orientation = get_orientation(fid_list)
+            selected_sequences = get_orientated_sequences(selected_sequences,
+                                                          orientation)
 
-        elif line_length == 3:
-            trimming_positions = get_trimming_positions(fid_list)
-            final_sequences = get_trimmed_sequences(selected_sequences,
-                                                    trimming_positions)
-
-        elif line_length == 4:
-            trimming_positions = get_trimming_positions(fid_list)
+        if arguments.replace:
             new_ids = get_new_ids(fid_list)
-
-            trimmed_sequences = get_trimmed_sequences(selected_sequences,
-                                                      trimming_positions)
-            final_sequences = get_new_id_sequences(trimmed_sequences,
+            selected_sequences = get_new_id_sequences(selected_sequences,
                                                    new_ids)
-
+            
+        final_sequences = selected_sequences
+        
     else:
-        if arguments.length:
-            length = arguments.length
-            cut_sequences = get_cut_sequences(fasta_sequences, length)
-            final_sequences = cut_sequences
+        final_sequences = fasta_sequences
 
-        else:
-            final_sequences = fasta_sequences
+    if arguments.revcom:
+        final_sequences = get_revcom_sequences(final_sequences)
 
     if arguments.split:
         construct_individual_outputs(final_sequences)
