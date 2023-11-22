@@ -1,3 +1,0 @@
-ID	start	end
-gen1	3	9
-gen3	6	15
