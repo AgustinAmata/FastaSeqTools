@@ -1,0 +1,3 @@
+ID	start	end	Orientation	NewID
+gen1	3	9	+	Ara1
+gen3	6	15	-	Ara2
